@@ -4,23 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductController extends Controller
 {
     /**
-     * Display products with filtering, searching,
-     * sorting, pagination and price statistics.
+     * Display products with:
+     * Search
+     * Filtering
+     * Sorting
+     * Pagination
+     * Statistics
      */
     public function index(Request $request)
     {
         /*
         |--------------------------------------------------------------------------
-        | Base Product Query
-        |--------------------------------------------------------------------------
-        | Apply filters and search first.
-        | The same query will be used for both:
-        | 1. Product listing
-        | 2. Product statistics
+        | Base Query
         |--------------------------------------------------------------------------
         */
 
@@ -30,12 +30,11 @@ class ProductController extends Controller
                 'min_price',
                 'max_price',
             ])
-        )
-            ->search($request->input('search'));
+        )->search($request->input('search'));
 
         /*
         |--------------------------------------------------------------------------
-        | Product Price Statistics
+        | Statistics
         |--------------------------------------------------------------------------
         */
 
@@ -54,8 +53,6 @@ class ProductController extends Controller
         /*
         |--------------------------------------------------------------------------
         | Product Listing
-        |--------------------------------------------------------------------------
-        | Sorting and pagination are applied only to the product listing.
         |--------------------------------------------------------------------------
         */
 
@@ -77,7 +74,7 @@ class ProductController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'category' => 'required',
+            'category' => 'required|string|max:100',
             'price' => 'required|numeric|min:0',
         ]);
 
@@ -86,5 +83,115 @@ class ProductController extends Controller
         return redirect()
             ->route('products.index')
             ->with('success', 'Product added successfully!');
+    }
+
+    /**
+     * Update an existing product.
+     */
+    public function update(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'category' => 'required|string|max:100',
+            'price' => 'required|numeric|min:0',
+        ]);
+
+        $product->update($validated);
+
+        return redirect()
+            ->route('products.index')
+            ->with('success', 'Product updated successfully!');
+    }
+
+    /**
+     * Delete a single product.
+     */
+    public function destroy(Product $product)
+    {
+        $product->delete();
+
+        return redirect()
+            ->route('products.index')
+            ->with('success', 'Product deleted successfully!');
+    }
+
+    /**
+     * Bulk delete products.
+     */
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'product_ids' => 'required|array|min:1',
+            'product_ids.*' => 'integer|exists:products,id',
+        ]);
+
+        Product::whereIn('id', $validated['product_ids'])->delete();
+
+        return redirect()
+            ->route('products.index')
+            ->with(
+                'success',
+                count($validated['product_ids']) . ' product(s) deleted successfully!'
+            );
+    }
+
+    /**
+     * Export filtered products as CSV.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $query = Product::filter(
+            $request->only([
+                'category',
+                'min_price',
+                'max_price',
+            ])
+        )->search($request->input('search'));
+
+        $products = $query
+            ->sort($request->input('sort'))
+            ->get();
+
+        $fileName = 'products-' . now()->format('Y-m-d-H-i-s') . '.csv';
+
+        return response()->streamDownload(function () use ($products) {
+
+            $handle = fopen('php://output', 'w');
+
+            /*
+            |--------------------------------------------------------------------------
+            | CSV Header
+            |--------------------------------------------------------------------------
+            */
+
+            fputcsv($handle, [
+                'ID',
+                'Product Name',
+                'Category',
+                'Price',
+                'Created At',
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | CSV Rows
+            |--------------------------------------------------------------------------
+            */
+
+            foreach ($products as $product) {
+                fputcsv($handle, [
+                    $product->id,
+                    $product->name,
+                    $product->category,
+                    $product->price,
+                    $product->created_at?->format('Y-m-d H:i:s'),
+                ]);
+            }
+
+            fclose($handle);
+
+        }, $fileName, [
+            'Content-Type' => 'text/csv',
+        ]);
     }
 }

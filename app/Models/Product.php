@@ -18,17 +18,17 @@ class Product extends Model
      */
     public function scopeFilter(Builder $query, array $filters)
     {
-        // Category filter
+        // Category
         if ($category = $filters['category'] ?? null) {
             $query->where('category', $category);
         }
 
-        // Minimum price filter
+        // Minimum price
         if ($minPrice = $filters['min_price'] ?? null) {
             $query->where('price', '>=', $minPrice);
         }
 
-        // Maximum price filter
+        // Maximum price
         if ($maxPrice = $filters['max_price'] ?? null) {
             $query->where('price', '<=', $maxPrice);
         }
